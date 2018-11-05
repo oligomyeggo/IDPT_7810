@@ -1,0 +1,166 @@
+---
+title: "Exercises 5"
+author: "Caitlin Winkler"
+date: "12/13/2017"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r files}
+
+library(eda)
+
+update_eda()
+
+library(DESeq2)
+library(pheatmap)
+library(RColorBrewer)
+library(tidyverse)
+library(cowplot)
+library(ggrepel)
+
+```
+
+
+# Overview
+
+Here is a [link](https://raw.githubusercontent.com/rnabioco/eda/master/vignettes/exercises-5.Rmd) to the text of these exercises.
+
+# Question 1
+
+The `drug_resistant2_counts` and `drug_resistant2_coldata` objects contain a count matrix and metadata for an experiment in which two parental cell lines and their drug resistant derivatives were sequenced. You're interested in determining the changes in gene expression associated with acquired resistance to the drug. Build a DESeqDataSet from these objects and calculate differential gene expression. For now, ignore the contribution of cell line identity (`design = ~drug`). Convert the results to a tibble and use dyplr verbs to determine the number of genes that are differentially expressed between the parent and resistant group (padj <= 0.01).
+
+## Strategy
+
+```{r q1}
+
+#Build a DESeqDataSet from `drug_resistant2_counts` and `drug_resistant2_coldata` objects
+dds <- DESeqDataSetFromMatrix(countData = drug_resistant2_counts, 
+                              colData = drug_resistant2_coldata,
+                              design = ~drug)
+
+#Function to determine the number of genes that are differentially expressed
+diff_exp_genes <- function(DESeq_data_set){
+  
+    DESeq_data_set <- DESeq(DESeq_data_set)
+    res <- results(DESeq_data_set) 
+    summary(res)
+    
+    res_tibble <- as.data.frame(res) %>% 
+      tibble::rownames_to_column(var = "gene") %>% 
+      as.tibble()
+    
+    n_rows <- filter(res_tibble, padj <= 0.01) %>% 
+      nrow(.)
+    n_rows
+
+}
+
+dds_deg <- diff_exp_genes(dds)
+
+dds_deg
+
+```
+
+## Interpretation
+
+There are **26** genes that are differentially expressed between the parental cell lines and their drug resistant derivatives, indicating that these 26 genes are associated with acquired resistance to the drug. However, this is an unexpectedly small number of differentially expressed, as explored in **Question 2**.
+
+# Question 2
+
+The small number of differentially expressed genes in question 1 is unexpected in this experiment. Apply a regularized log transform to the DESeqDataSet from question 1 and generate a PCA plot to examine the data. What appears to be wrong with these data? Hint: it will be easier to interpret the PCA plot if the `intgroups` argument is a character vector containing both variables in colData.
+
+## Strategy
+
+```{r q2}
+
+#Apply a regularized log transform to dds
+rld <- rlog(dds,
+            blind = FALSE)
+
+#Generate a PCA plot
+plotPCA(rld, intgroup = c("cell_line", "drug")) +
+  scale_color_brewer(palette = "Set1") +
+  geom_text_repel(aes(label = name))
+
+```
+
+## Interpretation
+
+Principal Component Analysis (PCA) plots offer a way to visualize relationships in multidimensional data by identifying clusters of variables (in this case, genes) that explain the majority of variance present. In this PCA plot, it is evident that there is something wrong with the `2:parent` and `2:resistant` data. One replicate of each group has been mislabeled, so that one `2:parent` data point is mislabeled as a `2:resistant`, and one `2:resistant` data point is mislabeled as `2:parent`.
+
+# Question 3
+
+There are two reasonable ways to deal with the problem identified in question 2. One involves subsetting the counts matrix and colData as in the pseudo-code below...
+``` r
+drug_resistant2_counts_fixed <- drug_resistant2_counts[,-c(?,?)]
+drug_resistant2_coldata_fixed <- drug_resistant2_coldata[-c(?,?),]
+```
+...and the other requires only editing the colData...
+``` r
+drug_resistant2_coldata_fixed <- drug_resistant2_coldata
+drug_resistant2_coldata_fixed$drug[?] <- "parent"
+drug_resistant2_coldata_fixed$drug[?] <- "resistant"
+```
+Use the approach that you think is most appropriate and generate a new, corrected DESeqDataSet. Justify your choice briefly in the interpretation. Calculate differential gene expression and report the new number of genes differentially expressed between the parent and resistant group.
+
+## Strategy
+
+```{r q3}
+
+#Correcting the data
+drug_resistant2_coldata_fixed <- drug_resistant2_coldata
+drug_resistant2_coldata_fixed$drug[12] <- "parent"
+drug_resistant2_coldata_fixed$drug[7] <- "resistant"
+
+#Generating a new, corrected DESeqDataSet
+dds2 <- DESeqDataSetFromMatrix(countData = drug_resistant2_counts, 
+                              colData = drug_resistant2_coldata_fixed,
+                              design = ~drug)
+
+#Determine the new number of genes that are differentially expressed
+dds_deg2 <- diff_exp_genes(dds2)
+
+dds_deg2
+
+#Apply a regularized log transform to dds
+rld2 <- rlog(dds2,
+            blind = FALSE)
+
+#Generate a PCA plot
+plotPCA(rld2, intgroup = c("cell_line", "drug")) +
+  scale_color_brewer(palette = "Set1")
+
+```
+
+## Interpretation
+
+One way to address the problem identified in question 2 is to drop the mislabeled values. This could be achieved by using the first block of pseudo-code provided, which involves subsetting the counts matrix and colData to remove the mislabeled values. The second way to address the problem identified in question 2 is to simply re-label the mislabeled values, which is acheived by editing just colData. As the values were obviously mislabeled, I opted for the second option, illustrated in the second PCA plot. Using the new, corrected data, the number of genes differentially expressed between the parent and resistant groups is now **454**.
+
+# Question 4
+
+In addition to the problem corrected in question 3, the PCA plot in question 2 revealed that the majority of variance between groups in this experiment is not due to drug resistance. What is the primary source of variance? Build the DESeqDataSet once more, this time including a term in the design (`design = ~? + drug`) that will correct for the major source of uninteresting variance in this experiment. As before, calculate differential gene expression and report the new number of genes differentially expressed between the parent and resistant group.
+
+## Strategy
+
+```{r q4}
+
+#Build a new DESeqDataSet, including `design = ~cell_line + drug`
+dds3 <- DESeqDataSetFromMatrix(countData = drug_resistant2_counts, 
+                              colData = drug_resistant2_coldata_fixed,
+                              design = ~cell_line + drug)
+
+dds_deg3 <- diff_exp_genes(dds3)
+
+dds_deg3
+
+```
+
+## Interpretation
+
+The majority of variance between groups in this experiment is not due to drug resistance. Instead, the primary source of variance is **cell line**, as illustrated by the first principal component (the x-axis; 86% variance). After correcting for this major source of uninteresting variance in this experiment, the new number of genes differentially expressed between the parent and resistant group is **1950**.

@@ -1,0 +1,144 @@
+---
+title: "Class 1 Exercises"
+author: "Caitlin Winkler"
+date: "November 29, 2017"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(eda)
+library(ggplot2)
+library(ggrepel)
+```
+Note: I received help from Kent and Austin in office hours (11/30/17).
+
+## Exercise 1
+
+Tidy the `mtcars` data set. Note that car names are rownames in the built-in data, so they need to be moved to their own column prior to tibble conversion.
+
+Tidied `mtcars` data set:
+```{r ex1.1}
+
+mtcars_tbl <- mtcars %>% 
+  mutate(name = rownames(.)) %>% 
+  select(name, everything()) %>% 
+  as_tibble()
+
+mtcars_tidy <- mtcars_tbl %>% 
+  gather(var, value, -name)
+
+mtcars_tidy
+
+```
+
+Alternatively, here is another way to tidy the `mtcars` data set as described in class:
+```{r ex1.2}
+
+mtcars_tidy2 <- rownames_to_column(mtcars) %>% 
+  as_tibble() %>% 
+  rename(name = rowname)
+
+mtcars_tidy2 <- gather(mtcars_tidy2, var, value, -name)
+
+mtcars_tidy2
+
+```
+
+## Exercise 2 
+
+For each car in the tidy `mtcars` data set, calculate the mean (`mean()`) and variance (`var()`) for each variable. Try using both `summarize()` and `summarize_each()`. Note: I used the `summarize_all()` function instead of the `summarize_each()` function because I received a warning indicating that `summarize_each()` was deprecated.
+
+Calculating the mean and variance for each variable using `summarize`:
+```{r ex2.1}
+
+mtcars_tidy %>% 
+  group_by(var) %>% 
+  summarize(value_mean = mean(value),
+            value_var = var(value))
+
+```
+
+Calculating the mean and variance for each variable using `summarize_all()`:
+```{r ex2.2}
+
+mtcars_tidy %>% 
+  rename(variable = var) %>% 
+  group_by(variable) %>% 
+  summarize_at(.vars = c("value"), 
+               .funs = funs(value_mean = mean, 
+                            value_var = var))
+  
+```  
+
+## Exercise 3
+
+Plot `mpg` vs `cyl` for the mtcars data set. Which format should you use? The original data set, or the tidied one? Why?
+
+While the tidied data set (or long format) is useful for performing functions like `summarize`, the original data set (or wide format) is useful for plotting because it only has one row per observation (multiple observations of a single individual are distributed to many rows). For example, `mpg` vs. `cyl`represents an x-y pair, where x and y are two columns in the data:
+
+```{r ex3}
+
+ggplot(mtcars_tbl, aes(mpg, cyl, color = factor(gear))) +
+  geom_point(size = 3) +
+  geom_text_repel(aes(label = name)) +
+  theme_classic(base_size = 11) +
+  scale_color_brewer(palette = "Set1")
+
+```
+
+## Exercise 4
+
+Using the provided qpcr data, plot the changes in gene expression over time. Use colors to represent genotypes and facets for the different genes. If that’s too easy, add error bars (`geom_errorbar()`) and connect each point with a line (`geom_line()`).
+
+Base plot of changes in gene expression over time (no error bars or line):
+
+```{r ex4, message = FALSE}
+
+#Tidy qpcr_data
+qpcr_data_tidy <- qpcr_data %>% gather(col, value, -row)
+
+#Tidy qpcr_names
+qpcr_names_tidy <- qpcr_names %>% gather(col, value, -row)
+
+#Separate out the sample, time, gene, rt, and rep columns from qpcr_names_tidy
+qpcr_names_tidy2 <- qpcr_names_tidy %>% 
+  separate(value, into = c('sample', 'time', 'gene', 'rt', 'rep'), sep = '_')
+qpcr_names_tidy <- qpcr_names_tidy2
+
+#Join qpcr_data and qpcr_names into qpcr_tidy
+qpcr_tidy <- left_join(qpcr_names_tidy, 
+                       qpcr_data_tidy, 
+                       by = c("row", "col"))
+
+#Plot the changes in gene expression over time using qpcr_tidy
+ggplot(qpcr_tidy, aes(time, value)) +
+  geom_point(aes(color = sample), size = 3) +
+  facet_wrap(~gene)
+
+```
+
+Plot of changes in gene expression over time including error bars and fit line:
+```{r, warning = FALSE}
+
+#Calculate the mean and standard deviations for the qpcr_tidy data set
+qpcr_tidy_std <- qpcr_tidy %>% 
+  group_by(sample, time, gene, rt) %>% 
+  mutate(mean_value = mean(value), 
+         std_value = sd(value), 
+         upper = mean_value + std_value,
+         lower = mean_value - std_value)
+
+#Plot the changes in gene expression over time using qpcr_tidy
+ggplot(qpcr_tidy_std, aes(time, value)) +
+  geom_point(aes(color = sample), size = 3) +
+  facet_wrap(rt ~ gene) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.4) +
+  geom_smooth(method = "loess", aes(group = sample, color = sample))
+
+```
+

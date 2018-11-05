@@ -1,0 +1,149 @@
+---
+title: "Exercises 2"
+author: "Caitlin Winkler"
+date: "12/3/2017"
+output: 
+  html_document:
+      code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(eda)
+
+```
+
+# Overview
+
+Here is a [link](https://raw.githubusercontent.com/rnabioco/eda/master/vignettes/exercises-2.Rmd) to the text of these exercises.
+
+# Question 1
+
+Calculate the mean and variance of the `Ozone`, `Solar.R`, `Wind`, and `Temp` variables for each month in the `airquality` dataset, ignoring `NA` values. Use `summarize()` first, then use `summarize_at()`. Note that arguments to summary functions can be passed as dots to `summarize_at()`.
+
+## Strategy
+
+```{r q1}
+
+#Calculate the mean and variance of `airquality` variables using `summarise()`
+airquality_mv_sum <- airquality %>% group_by(Month) %>% 
+  summarise(Ozone_mean = mean(Ozone, na.rm = TRUE),
+            Ozone_var = var(Ozone, na.rm = TRUE),
+            Solar.R_mean = mean(Solar.R, na.rm = TRUE),
+            Solar.R_var = var(Solar.R, na.rm = TRUE),
+            Wind_mean = mean(Wind, na.rm = TRUE),
+            Wind_var = var(Wind, na.rm = TRUE),
+            Temp_mean = mean(Temp, na.rm = TRUE),
+            Temp_var = var(Temp, na.rm = TRUE))
+
+airquality_mv_sum
+
+#Calculate the mean and variance of `airquality` variables using `summarise_at()`
+airquality_mv_sumat <- airquality %>% group_by(Month) %>% 
+  summarise_at(.vars = vars(Ozone, Solar.R, Wind, Temp),
+               .funs = funs(mean, var), na.rm = TRUE)
+
+airquality_mv_sumat
+```
+
+## Interpretation
+
+Both the `summarise()` function and the `summarise_at()` function produce the same numeric results; both produce a table illustrating the mean and variance values for the `Ozone`, `Solar.R`, `Wind`, and `Temp` variables for each month in the `airquality` dataset. However, they are syntactically distinct. For `summarise()`, one must list each individual variable and function that is to be summarised. Therefore, `summarise()` seems more suitable for instances where one is dealing with a singe variable or function. `summarise_at()`, on the other hand, seems like a better choice as the number of variables or functions increases. However, `summarise_at()` will output variables under the following notation: **variable_function**. Thus, `summarise()` might have more flexibility than `summarise_at()`for naming outputs.
+
+# Question 2
+
+Calculate mean expression values for each `nutrient` of `brauer_gene_exp`. Calculate the values by sampling 1%, 10% and 50% of the rows. How do your numbers change at each threshold?
+
+## Strategy
+
+```{r q2}
+
+#Code from the original assignment, calculating the mean expression values for each `nutrient` and `systematic_name` combination of `brauer_gene_exp`:
+
+# #Calculate mean expression values by sampling 1% of the rows
+# brauer_gene_exp_1 <- brauer_gene_exp %>% 
+#   sample_frac(0.01) %>% 
+#   group_by(systematic_name, nutrient) %>% 
+#   summarise(exp_mean = mean(expression))
+# 
+# brauer_gene_exp_1
+# 
+# #Calculate mean expression values by sampling 10% of the rows
+# brauer_gene_exp_10 <- brauer_gene_exp %>% 
+#   sample_frac(0.1) %>% 
+#   group_by(systematic_name, nutrient) %>% 
+#   summarise(exp_mean = mean(expression))
+# 
+# brauer_gene_exp_10
+# 
+# #Calculate mean expression values by sampling 50% of the rows
+# brauer_gene_exp_50 <- brauer_gene_exp %>% 
+#   sample_frac(0.5) %>% 
+#   group_by(systematic_name, nutrient) %>% 
+#   summarise(exp_mean = mean(expression))
+# 
+# brauer_gene_exp_50
+
+#Code for the updated assignment, calculating the mean expression values for each `nutrient` only:
+
+#Calculate mean expression values by sampling 1% of the rows
+brauer_gene_exp_1 <- brauer_gene_exp %>% 
+  sample_frac(0.01) %>% 
+  group_by(nutrient) %>% 
+  summarise(exp_mean = mean(expression))
+
+brauer_gene_exp_1
+
+#Calculate mean expression values by sampling 10% of the rows
+brauer_gene_exp_10 <- brauer_gene_exp %>% 
+  sample_frac(0.1) %>% 
+  group_by(nutrient) %>% 
+  summarise(exp_mean = mean(expression))
+
+brauer_gene_exp_10
+
+#Calculate mean expression values by sampling 50% of the rows
+brauer_gene_exp_50 <- brauer_gene_exp %>% 
+  sample_frac(0.5) %>% 
+  group_by(nutrient) %>% 
+  summarise(exp_mean = mean(expression))
+
+brauer_gene_exp_50
+
+
+```
+
+## Interpretation
+
+The mean expression values for each `nutrient` of `brauer_gene_exp` changes considerably as the values are calculated from sampling 1%, 10%, and 50% of the rows. As more rows are sampled the mean expression values presumably become more accurate, as there are more instances to average together. Therefore, sampling 50% of the rows will generate more accurate mean expression values than sampling 10% of the rows, which in turn will generate more accurate mean expression values than sampling 1% of the rows.
+
+# Question 3 
+
+Join the `brauer_gene_exp` and `yeast_prot_prop` tables and calculate the mean codon adaptation index (`CAI` in `yeast_prot_prop`) for each molecular funtion (`MF` in `brauer_gene_exp`). Sort the results from largest to smallest mean CAI.
+
+## Strategy
+
+```{r q3}
+
+#Join the `brauer_gene_exp` and `yeast_prot_prop` tables into an abbreviated table
+brauer_yeast <- left_join(brauer_gene_exp %>%
+                          select(systematic_name, MF),
+                          yeast_prot_prop %>%
+                          select(ORF, CAI),
+                          by = c('systematic_name' = 'ORF'))
+
+#Calculate the mean CAI for each molecular function, and sort by descending CAI value
+brauer_yeast_sort <- brauer_yeast %>%
+  group_by(MF) %>% 
+  summarise(mean_CAI = mean(CAI)) %>% 
+  arrange(desc(mean_CAI))
+
+brauer_yeast_sort
+
+```
+
+## Interpretation
+
+The Codon Adaptation Index, represented as `CAI` in the above data frame, measures the relative adaptiveness or deviation of a given protein coding gene sequnce towards the codon of highly expressed reference genes. While an overly simplified interpretation, `CAI` values are often equated to gene expression, such that a high `CAI` value corresponds to high gene expression. In that context, the above data frame lists the mean `CAI` for each molecular function `MF` in descending order, such that the higher the `CAI` value, the higher the gene expression for the corresponding `MF`. In this data frame, genes that are involved in glyceraldehyde-3-phosphate dehydrogenase (phosphorylating), fructose-bisphosphate aldolase, and triose-phosphate isomerase activity are the most highly expressed, whereas genes that are involved in iron hydrogenase, FMN reductase, and protein tyrosine phosphatase activity are the least highly expressed. This makes sense as the genes that have the highest CAI values are all involved in glycolsis, which yeast like to do.

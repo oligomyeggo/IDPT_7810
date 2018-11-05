@@ -1,0 +1,154 @@
+---
+title: "Exercises 3"
+author: "Caitlin Winkler"
+date: "12/7/2017"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(eda)
+library(valr)
+
+```
+
+# Overview
+
+Here is a [link](https://raw.githubusercontent.com/rnabioco/eda/master/vignettes/exercises-3.Rmd) to the text of these exercises.
+
+# Question 1
+
+The Encode project has performed `eCLIP` experiments to map RNA binding protein  (RBP) binding sites for > 100 RBPs. Go to the [Encode website](https://www.encodeproject.org/matrix/?type=Experiment), search for `eCLIP` experiments, select an RBP eClip experiment, and load a `BED` file (bed narrowPeak format) with the binding sites into R using just the url. Use the [`read_narrowPeak()`](https://rnabioco.github.io/valr/reference/read_bed.html) function from `valr`. Make sure that the file was generated using the `hg19` genome build, and that you do **not** select the `eCLIP mock input` samples, which are negative controls. Display the bed tibble that you pulled from the Encode database and give a one to two sentence summary about the known functions of the RBP. 
+
+## Strategy
+
+```{r q1, warning = FALSE, message = FALSE}
+
+url <- "https://www.encodeproject.org/files/ENCFF100OEX/@@download/ENCFF100OEX.bed.gz"
+
+PTBP1 <- read_narrowpeak(url, col_names = FALSE)
+
+PTBP1
+
+```
+
+## Interpretation
+
+**PTBP1** (polypyrimidine tract-binding protein 1) is a ubiquitously expressed heterogeneous nuclear ribonucleoprotein (hnRNPs). hnRNPs as a protein family are associated with pre-mRNAs in the nucleus and appear to influence pre-mRNA processing and other aspects of mRNA metabolism and transport. **PTBP1** binds to the polypyrimidine tracts of introns and plays a role in pre-mRNA splicing and in the regulation of alternative splicing events, and also activates exon skipping of its own pre-mRNA during muscle cell differentiation. As a result of alternative splicing, **PTBP1** gene transcripts in the mammalian brain are missing exon 9, which contributes to the evolutionary difference between the nervous system of mammals and other vertebrates.
+
+Reference: 
+[PTBP1 Gene,](http://www.genecards.org/cgi-bin/carddisp.pl?gene=PTBP1)
+[Wikipedia](https://en.wikipedia.org/wiki/PTBP1)
+
+# Question 2
+
+Use `bed_intersect()` and some dplyr functions to determine how many `eCLIP` peaks are found in genes and how many are intergenic. (see the documentation on the `invert` argument for `bed_intersect()`). Use the `hg19_genes.bed.gz` bed file as your gene bed file (location shown below). Explain in the interpretation whether or not the RBP primarily binds to known (geneic) or unannotated (intergeneic) regions. 
+
+```{r, warning = FALSE, message = FALSE}
+
+genes_file <- system.file("extdata", "hg19_genes.bed.gz", package = "eda")
+genes <- read_bed(genes_file, n_fields = 6)
+
+```
+
+## Strategy
+
+```{r q2, warning = FALSE, message = FALSE}
+
+genes_PTBP1 <- bed_intersect(PTBP1, genes, invert = FALSE)
+
+genes_PTBP1
+
+geneic_peaks <- genes_PTBP1 %>% 
+  select(chrom, start.x, end.x, strand.x) %>% 
+  unique() %>% 
+  nrow(.)
+
+geneic_peaks
+
+genes_PTBP1_invert <- bed_intersect(PTBP1, genes, invert = TRUE)
+
+genes_PTBP1_invert
+
+intergeneic_peaks <- genes_PTBP1_invert %>%
+  unique() %>%
+  nrow(.)
+
+intergeneic_peaks
+
+```
+
+## Interpretation
+
+Using `bed_intersect()` and some `dplyr` functions, I found that there are `r geneic_peaks` `eCLIP` peaks in genes, and `r intergeneic_peaks` `eCLIP` peaks in intergeneic regions, indicating that **PTBP1** primarily binds to known (geneic) regions.
+
+# Question 3 
+
+Determine which gene has the largest number of binding sites for your `RBP`. 
+
+## Strategy
+
+```{r q3, warning = FALSE, message = FALSE}
+
+genes_PTBP1 %>% 
+  group_by(name.y) %>% 
+  summarise(n_peaks = n()) %>% 
+  arrange(desc(n_peaks)) %>% 
+  mutate(ranked_order = row_number())
+
+```
+
+## Interpretation
+
+Using the data frame created via `bed_intersect()` in **Question 2**, I was able to determine that the gene **SUPT3H** has the largest number of binding sites for **PTBP1**, with 2736 total binding sites. **SUPT3H** (Suppressor of Ty 3 Homolog) is a transcription initiaion protein involved in chromatin organization and RNA polymerase II transcription initiation and promoter clearance. Considering that **PTBP1** is an ubiquitous hnRNP, it makes sense that it would have a large number of binding sites on a gene that is largely involved with transcription.
+
+Reference:
+[SUPT3H Gene](http://www.genecards.org/cgi-bin/carddisp.pl?gene=SUPT3H)
+
+# Question 4
+
+Use another function from `valr` (overview and documentation [here](https://rnabioco.github.io/valr/articles/valr.html) to study a relationship between your eClip binding sites and genes in the `gene` bed file. Explain your question and answer. Some `valr` functions require a `genome` file, which indicates the lengths of the chromosomes.You can access this file as shown below.
+
+```{r, warning = FALSE, message = FALSE}
+
+genome_file <- system.file("extdata", "hg19_genome.txt.gz", package = "eda")
+genome <- read_genome(genome_file)
+
+genome
+```
+
+## Strategy
+
+```{r q4, warning = FALSE, message = FALSE}
+
+snp_file <- system.file("extdata", 
+                        "hg19.snps147.chr22.bed.gz", 
+                        package = "valr")
+
+snps <- read_bed(snp_file, 
+                 n_fields = 6)
+
+PTBP1_SNPs <- bed_closest(snps, PTBP1) %>% 
+  filter(.overlap > 0, abs(.dist) < 50) %>% 
+  select(chrom:strand.x, name.y, .overlap, .dist) %>% 
+  arrange(desc(.dist))
+
+PTBP1_SNPs
+
+num_SNPS = nrow(PTBP1_SNPs)
+
+num_SNPS
+
+```
+
+## Interpretation
+
+**SNPs** (single nucleotide polymorphisms) are variations that occur in a single nucleotide at a specific position in the genome. **SNPs** are the most common type of genetic variation among people, and generally have no effect on health or development. However, when **SNPs** occur within a gene or in a regulatory region near a gene, they may play a more direct role in disease by affecting a gene's function. Indeed, mutations such as **SNPs** that disrupt non-coding genetic elements are of growing interest as changes in noncoding regions are a major avenue of disease. I was curious how many **SNPs** were within the binding sites of **PTBP1**, as variations at binding sites could impair the ability of **PTBP1** to recognize its binding site and/or function. Using the `bed_closest()` function provided by `valr`, I found that there are `r num_SNPS` **SNPs** that are within **PTBP1** binding sites. Because **PTBP1** is important for pre-mRNA processing, as well as other aspects of mRNA metabolism and transport, and because **PTBP1** is ubiquitously expressed, I would anticipate that **SNPs** in **PTBP1** binding sites could have detrimental effects on splicing throughout an entire organism, potentially rendering it unviable.
+
+References:
+[Genetic variation and RNA binding proteins,](https://www.ncbi.nlm.nih.gov/pubmed/25201108)
+[What are single nucleotide polymorphisms (SNPs)?](https://ghr.nlm.nih.gov/primer/genomicresearch/snp)
